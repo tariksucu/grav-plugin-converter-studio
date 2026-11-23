@@ -2,8 +2,8 @@ enabled: true
 # Your Converter Studio API key (https://converter.studio/account#api-keys). Left empty, the
 # CONVERTER_STUDIO_API_KEY environment variable is used, which keeps the key out of user/config.
 api_key: ''
-# Change only to try the plugin against a test server.
-api_url: 'https://converter.studio/api'
+# The API address is not a setting: the key only goes to https://converter.studio/api, or to the
+# address in the CONVERTER_STUDIO_API_URL environment variable (a test server).
 
 # What converts when it is uploaded in the Admin. Nothing converts until a kind is switched on.
 rules:
@@ -25,8 +25,8 @@ rules:
   audio:
     upload: false
 
-# keep: moved to user/data/converter-studio/originals (not public); beside: left next to the
-# converted file; delete: removed.
+# keep: moved to user/data/converter-studio/originals as <name>.original.txt, which the web server
+# does not serve; beside: left next to the converted file; delete: removed.
 originals: keep
 
 results:

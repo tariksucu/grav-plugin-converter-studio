@@ -36,9 +36,12 @@ final class Converter
     /** @var \Closure(float): void */
     private readonly \Closure $sleep;
 
+    private readonly Originals $originals;
+
     /**
      * @param string $root The site's root; jobs keep paths relative to it.
-     * @param string $originalsDir Where kept originals go (user/data/converter-studio/originals).
+     * @param string $originalsDir Where kept originals go (user/data/converter-studio/originals),
+     *     under a name the web server does not serve (see Originals).
      * @param (\Closure(string, string): void)|null $log Gets a level (info, warning) and a line.
      * @param (\Closure(): float)|null $clock The time (microtime(true)); tests pass their own.
      * @param (\Closure(float): void)|null $sleep Waits that many seconds.
@@ -48,11 +51,12 @@ final class Converter
         private readonly JobStore $jobs,
         private readonly References $references,
         private readonly string $root,
-        private readonly string $originalsDir,
+        string $originalsDir,
         ?\Closure $log = null,
         ?\Closure $clock = null,
         ?\Closure $sleep = null,
     ) {
+        $this->originals = new Originals($originalsDir);
         $this->log = $log ?? static function (string $level, string $message): void {
         };
         $this->clock = $clock ?? static fn (): float => microtime(true);
@@ -371,8 +375,8 @@ final class Converter
         if ($mode === 'delete') {
             @unlink($file);
         } else {
-            $destination = $this->originalsDir . '/' . $job->path();
-            $destination = self::freePath($destination);
+            // photo.heic.original.txt: no web server that follows Grav's rules serves it.
+            $destination = $this->originals->destination($job->path());
             @mkdir(dirname($destination), 0775, true);
             if (!@rename($file, $destination)) {
                 // Another disk: copy, then remove.
@@ -451,29 +455,24 @@ final class Converter
     }
 
     /**
-     * $path, or the same with "-1", "-2"… before its extension when taken.
-     */
-    private static function freePath(string $path): string
-    {
-        if (!file_exists($path)) {
-            return $path;
-        }
-        $extension = pathinfo($path, PATHINFO_EXTENSION);
-        $free = self::freeName(dirname($path), pathinfo($path, PATHINFO_FILENAME), $extension);
-        return $free ?? $path . '.' . time();
-    }
-
-    /**
      * A path relative to the site's root, or null when it is outside it.
      */
     public function relative(string $path): ?string
     {
-        $root = rtrim($this->root, '/') . '/';
+        return self::relativeTo($this->root, $path);
+    }
+
+    /**
+     * $path relative to $root (both resolved when they exist), or null when it is outside it.
+     */
+    public static function relativeTo(string $root, string $path): ?string
+    {
+        $base = rtrim($root, '/') . '/';
         $real = realpath($path);
         $path = $real !== false ? $real : $path;
-        $realRoot = realpath($this->root);
-        $root = $realRoot !== false ? rtrim($realRoot, '/') . '/' : $root;
-        return str_starts_with($path, $root) ? substr($path, strlen($root)) : null;
+        $realRoot = realpath($root);
+        $base = $realRoot !== false ? rtrim($realRoot, '/') . '/' : $base;
+        return str_starts_with($path, $base) ? substr($path, strlen($base)) : null;
     }
 
     public function absolute(string $relative): string

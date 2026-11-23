@@ -49,6 +49,8 @@ By hand: download the latest release, unzip it into `user/plugins` and rename th
 
    The key in the settings wins when both are set. A saved key is never shown again; leave the field
    as it is to keep it. To remove it, delete `api_key` from `user/config/plugins/converter-studio.yaml`.
+   The key is only sent to `https://converter.studio/api`, unless the server's environment names a
+   test server (see [Test server](#test-server)).
 
 3. Under **Convert when uploaded in the Admin**, switch on the kinds of files to convert. Nothing is
    converted until you do.
@@ -80,24 +82,31 @@ becomes `IMG_0042.jpg`. A name that is taken gets a number (`IMG_0042-1.jpg`); n
 The upload waits up to 40 seconds for its conversions (a setting); photos and documents usually take a
 few seconds.
 
-- **The original** is moved to `user/data/converter-studio/originals/`, which is not reachable from the
-  web, so you keep it without publishing it. It can also stay next to the converted file, or be deleted.
+- **The original** is moved to `user/data/converter-studio/originals/` and renamed to end in
+  `.original.txt` (`IMG_0042.heic.original.txt`), so you keep it without publishing it: the web server
+  rules that Grav ships refuse `.txt` files under `user/` (for Apache, nginx, IIS and lighttpd since
+  Grav 1.6, and Grav's own router for PHP's built-in server), and its current rules, Caddy's included,
+  refuse everything in `user/data` but common media types. Under its own name, an original such as
+  `IMG_0042.MOV` would be served. To use an original again, remove `.original.txt` from its name. It
+  can also stay next to the converted file, or be deleted.
 - **Title, alt text and caption** set for the original (its `.meta.yaml` file) move to the converted
   file.
 - **Links.** The editor inserts a file under the name it was uploaded with (`![](IMG_0042.heic)`). When
   the page is saved, such links point to the converted file (`![](IMG_0042.jpg)`), in the content and in
   the page's header (front matter).
-- **A file that cannot be converted** (an unreadable file, no credits left…) stays as it was uploaded,
-  and the uploader shows Converter Studio's explanation. Admin 2 words it as a failed upload ("Failed
-  to upload IMG_0042.heic: Saved as uploaded. IMG_0042.heic was not converted: …"); the file is in the
-  page all the same. Its automatic retries of that upload get the same answer, not a new conversion.
+- **A file that cannot be converted** (an unreadable file, no credits left…) stays in the page as it
+  was uploaded, and the upload succeeds as usual (the uploader does not show an error). Converter
+  Studio's explanation ("IMG_0042.heic was not converted: …") goes to Grav's log (`logs/grav.log`,
+  which the Admin's log viewer shows) and to `bin/plugin converter-studio status`.
 - **Only uploads in the Admin are converted**, never files that visitors send through forms: a
   conversion spends your credits.
 
 **Slow conversions.** A conversion that outlasts the upload's wait (a long video) goes on at Converter
-Studio, and the converted file is added when it is done, by Grav's scheduler. The scheduler runs when
-`bin/grav scheduler` is in the server's crontab
-([Grav's scheduler docs](https://learn.getgrav.org/17/advanced/scheduler)); without it, run:
+Studio, and the converted file is added when it is done, by Grav's scheduler: its `converter-studio`
+job looks at unfinished conversions for about 20 seconds each minute (a result that is already
+downloading may take longer to finish). The scheduler runs when `bin/grav scheduler` is in the
+server's crontab ([Grav's scheduler docs](https://learn.getgrav.org/17/advanced/scheduler)); without
+it, run:
 
 ```bash
 bin/plugin converter-studio work
@@ -150,6 +159,19 @@ Admin; when you edit pages by hand, update them yourself.
 
 The plugin keeps its working state in `user/data/converter-studio/` (unfinished conversions, which
 names were changed, kept originals). Finished conversions are forgotten after a week.
+
+### Test server
+
+The API address is not a setting, so that someone who can only edit the site's configuration cannot
+send your key to a server of their own. To try the plugin against a test server, set its address in
+the environment of PHP (for PHP-FPM, `env[CONVERTER_STUDIO_API_URL]` in the pool):
+
+```bash
+CONVERTER_STUDIO_API_URL=http://localhost:8080/api
+```
+
+An `api_url` in `user/config/plugins/converter-studio.yaml` (version 1.0.0 had one) is ignored;
+`bin/plugin converter-studio status` says so, and shows the address in use.
 
 ## Limits
 

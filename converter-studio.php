@@ -13,6 +13,7 @@ use Grav\Plugin\ConverterStudio\Job;
 use Grav\Plugin\ConverterStudio\Rules;
 use Grav\Plugin\ConverterStudio\Services;
 use Grav\Plugin\ConverterStudio\References;
+use Grav\Plugin\ConverterStudio\Settings;
 use RocketTheme\Toolbox\Event\Event;
 
 /**
@@ -22,12 +23,19 @@ use RocketTheme\Toolbox\Event\Event;
  * `bin/plugin converter-studio convert` command.
  *
  * Only Admin uploads are converted, never visitors' uploads through front-end forms (a
- * conversion spends the site's credits).
+ * conversion spends the site's credits). No listener throws: a file that cannot be converted
+ * stays as it was uploaded, and the reason goes to Grav's log and messages.
  */
 class ConverterStudioPlugin extends Plugin
 {
     /** Kept equal to blueprints.yaml (a unit test checks it). */
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.0.1';
+
+    /**
+     * After an upload, other listeners (Grav's audit trail and webhooks among them) come first;
+     * the conversion follows them.
+     */
+    public const UPLOAD_PRIORITY = -1000;
 
     /** @var array<string, true> Files already handled in this request (Grav 2 fires two events per upload). */
     private array $handled = [];
@@ -45,9 +53,9 @@ class ConverterStudioPlugin extends Plugin
         return [
             'onPluginsInitialized' => ['onPluginsInitialized', 0],
             // Classic Admin (Grav 1.7) and the API (Grav 2) both fire it after a page upload.
-            'onAdminAfterAddMedia' => ['onAdminAfterAddMedia', 0],
+            'onAdminAfterAddMedia' => ['onAdminAfterAddMedia', self::UPLOAD_PRIORITY],
             // The API (Grav 2): page and site media uploads, with the stored names.
-            'onApiMediaUploaded' => ['onApiMediaUploaded', 0],
+            'onApiMediaUploaded' => ['onApiMediaUploaded', self::UPLOAD_PRIORITY],
             'onAdminSave' => ['onAdminSave', 0],
             'onSchedulerInitialized' => ['onSchedulerInitialized', 0],
         ];
@@ -66,11 +74,12 @@ class ConverterStudioPlugin extends Plugin
 
     /**
      * Lets the Admin accept the file types the switched-on groups convert (Grav 1.7 refuses an
-     * extension it has no media type for, HEIC and camera RAW among them).
+     * extension it has no media type for, HEIC and camera RAW among them). Runs on every request,
+     * so it reads the settings and nothing else.
      */
     public function onPluginsInitialized(): void
     {
-        $groups = $this->services()->settings()->uploadGroups();
+        $groups = $this->settings()->uploadGroups();
         if ($groups === []) {
             return;
         }
@@ -130,6 +139,9 @@ class ConverterStudioPlugin extends Plugin
             $this->convertUploads((string) $page->path(), $names);
             return;
         }
+        if ($this->settings()->uploadGroups() === []) {
+            return;
+        }
         $media = $this->grav['locator']->findResource('user://media', true);
         if (is_string($media) && $media !== '') {
             $path = trim((string) ($event['path'] ?? ''), '/');
@@ -144,7 +156,8 @@ class ConverterStudioPlugin extends Plugin
 
     /**
      * Before a page is saved in the Admin: links to a file that was converted after it was
-     * inserted (`![](photo.heic)`) point to the converted file (`![](photo.jpg)`).
+     * inserted (`![](photo.heic)`) point to the converted file (`![](photo.jpg)`). A problem here
+     * never stops the save; it is logged.
      */
     public function onAdminSave(Event $event): void
     {
@@ -153,15 +166,21 @@ class ConverterStudioPlugin extends Plugin
             $this->keepApiKey($page);
             return;
         }
-        if (!$page instanceof PageInterface) {
+        if (!$page instanceof PageInterface || !$this->settings()->fixReferences()) {
             return;
         }
-        $services = $this->services();
-        if (!$services->settings()->fixReferences()) {
-            return;
+        try {
+            $this->fixReferences($page);
+        } catch (\Throwable $e) {
+            $this->log('warning', 'Converter Studio: the links of the saved page were not updated: ' . $e->getMessage());
         }
+    }
+
+    private function fixReferences(PageInterface $page): void
+    {
         $folder = (string) $page->path();
-        $relative = $folder !== '' ? $services->converter()->relative($folder) : null;
+        $services = $this->services();
+        $relative = $folder !== '' ? $services->relative($folder) : null;
         if ($relative === null) {
             return;
         }
@@ -208,11 +227,11 @@ class ConverterStudioPlugin extends Plugin
 
     /**
      * Grav's scheduler (bin/grav scheduler, run by cron every minute) finishes the conversions
-     * that outlast an upload, such as videos.
+     * that outlast an upload, such as videos, about 20 seconds a run.
      */
     public function onSchedulerInitialized(Event $event): void
     {
-        if (!$this->services()->settings()->scheduler()) {
+        if (!$this->settings()->scheduler()) {
             return;
         }
         $scheduler = $event['scheduler'] ?? null;
@@ -224,20 +243,36 @@ class ConverterStudioPlugin extends Plugin
     }
 
     /**
-     * Converts the files just uploaded into $folder, within the time an upload may wait, and tells
-     * the person uploading what happened. A file that cannot be converted stays as it was
-     * uploaded; the error is shown in the uploader.
+     * Converts the files just uploaded into $folder, within the time an upload may wait. A file
+     * that cannot be converted stays as it was uploaded: the upload is not turned into an error
+     * (the file is stored, and the listeners after this one must see it). Problems go to Grav's
+     * log (a failed conversion is logged where it fails), and everything to Grav's messages.
      *
      * @param string[]|null $names
      */
     private function convertUploads(string $folder, ?array $names): void
     {
-        $services = $this->services();
-        $settings = $services->settings();
-        $groups = $settings->uploadGroups();
-        if ($folder === '' || $groups === [] || !is_dir($folder)) {
+        $settings = $this->settings();
+        if ($folder === '' || $settings->uploadGroups() === [] || !is_dir($folder)) {
             return;
         }
+        try {
+            [$notes, $problems] = $this->convert($folder, $names, $settings);
+        } catch (\Throwable $e) {
+            $notes = [];
+            $problems = ['Saved as uploaded; Converter Studio could not convert it: ' . $e->getMessage()];
+            $this->log('warning', 'Converter Studio: ' . $problems[0]);
+        }
+        $this->tell($notes, $problems);
+    }
+
+    /**
+     * @param string[]|null $names
+     * @return array{0: string[], 1: string[]} Notes, and problems.
+     */
+    private function convert(string $folder, ?array $names, Settings $settings): array
+    {
+        $services = $this->services();
         // Without names (the classic Admin), the files written during this request.
         $since = (int) ($_SERVER['REQUEST_TIME'] ?? time()) - 2;
         if ($settings->apiKey() === null) {
@@ -248,14 +283,16 @@ class ConverterStudioPlugin extends Plugin
                     $files[] = basename($file);
                 }
             }
-            if ($files !== []) {
-                $this->tell([], [sprintf(
-                    '%s %s not converted: no Converter Studio API key is set. Add one in the plugin settings.',
-                    implode(', ', $files),
-                    count($files) === 1 ? 'was' : 'were',
-                )]);
+            if ($files === []) {
+                return [[], []];
             }
-            return;
+            $problem = sprintf(
+                '%s %s not converted: no Converter Studio API key is set. Add one in the plugin settings.',
+                implode(', ', $files),
+                count($files) === 1 ? 'was' : 'were',
+            );
+            $this->log('warning', 'Converter Studio: ' . $problem);
+            return [[], [$problem]];
         }
         $wait = $settings->uploadWait();
         $limit = (int) ini_get('max_execution_time');
@@ -277,16 +314,20 @@ class ConverterStudioPlugin extends Plugin
             $this->handled[$file] = true;
             if ($job->state() === Job::FAILED || $job->state() === Job::QUOTED) {
                 $problems[] = $job->describe();
+                if ($job->state() === Job::QUOTED) {
+                    // A failure is logged when it happens; a quote is not.
+                    $this->log('info', 'Converter Studio: ' . $job->describe());
+                }
             } else {
                 $notes[] = $job->describe() . ($job->pending() && !$settings->scheduler() ? ' Run: bin/plugin converter-studio work' : '');
             }
         }
-        $this->tell($notes, $problems);
+        return [$notes, $problems];
     }
 
     /**
-     * Shows what happened: Grav's messages (the classic Admin shows them), the log, and for
-     * problems an error the uploader shows (the file itself was stored all the same).
+     * Adds what happened to Grav's messages, which an admin page drawn later shows (the classic
+     * Admin's; Admin 2 has none). The log and the status command have the problems either way.
      *
      * @param string[] $notes
      * @param string[] $problems
@@ -294,25 +335,36 @@ class ConverterStudioPlugin extends Plugin
     private function tell(array $notes, array $problems): void
     {
         $messages = $this->grav['messages'] ?? null;
-        foreach ($notes as $note) {
-            if (is_object($messages) && method_exists($messages, 'add')) {
-                $messages->add($note, 'info');
-            }
-        }
-        if ($problems === []) {
+        if (!is_object($messages) || !method_exists($messages, 'add')) {
             return;
         }
-        // The conversion itself has been logged already.
-        $text = implode(' ', $problems);
-        $detail = 'Saved as uploaded. ' . $text;
-        // Grav 2's API (Admin 2) shows an ApiException's detail; the classic Admin the message.
-        $api = 'Grav\Plugin\Api\Exceptions\ApiException';
-        if (class_exists($api)) {
-            throw new $api(422, 'Converter Studio', $detail);
+        foreach ($notes as $note) {
+            $messages->add($note, 'info');
         }
-        throw new \RuntimeException($detail, 400);
+        foreach ($problems as $problem) {
+            $messages->add($problem, 'error');
+        }
     }
 
+    private function log(string $level, string $message): void
+    {
+        $log = $this->grav['log'] ?? null;
+        if (is_object($log)) {
+            $log->{$level === 'info' ? 'info' : 'warning'}($message);
+        }
+    }
+
+    /**
+     * The settings alone: cheap enough for every request.
+     */
+    private function settings(): Settings
+    {
+        return Settings::fromArray((array) $this->config->get('plugins.converter-studio', []));
+    }
+
+    /**
+     * Everything else, made the first time an upload, a page save or the scheduler needs it.
+     */
     private function services(): Services
     {
         return $this->services ??= Services::fromGrav($this->grav);

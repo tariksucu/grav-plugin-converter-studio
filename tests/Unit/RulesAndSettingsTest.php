@@ -91,31 +91,50 @@ final class RulesAndSettingsTest extends TestCase
         self::assertNull($settings->apiKey());
     }
 
-    public function testTheKeyAndAddressFallBackToTheEnvironment(): void
+    public function testTheKeyFallsBackToTheEnvironment(): void
     {
         putenv(Settings::KEY_VARIABLE . '=cvs_live_env');
+
+        self::assertSame('cvs_live_env', Settings::fromArray(['api_key' => ' '])->apiKey());
+        self::assertSame('cvs_live_config', Settings::fromArray(['api_key' => 'cvs_live_config'])->apiKey());
+    }
+
+    public function testTheKeyOnlyGoesToConverterStudioOrAnAddressFromTheEnvironment(): void
+    {
+        // Someone who can only edit the configuration cannot send the key elsewhere.
+        $edited = Settings::fromArray(['api_key' => 'cvs_live_config', 'api_url' => 'https://attacker.example/api']);
+        self::assertSame('https://converter.studio/api', $edited->apiUrl());
+        self::assertSame('https://attacker.example/api', $edited->ignoredApiUrl());
+        // 1.0.0 saved the default address with the settings: nothing to say about it.
+        self::assertNull(Settings::fromArray(['api_url' => 'https://converter.studio/api/'])->ignoredApiUrl());
+        self::assertNull(Settings::fromArray([])->ignoredApiUrl());
+
+        // A test server, named where only the server's owner can.
         putenv(Settings::URL_VARIABLE . '=http://localhost:8080/api/');
+        self::assertSame('http://localhost:8080/api', $edited->apiUrl());
+        putenv(Settings::URL_VARIABLE . '=file:///etc/passwd');
+        self::assertSame('https://converter.studio/api', $edited->apiUrl());
+    }
 
-        $empty = Settings::fromArray(['api_key' => ' ', 'api_url' => '']);
-        $set = Settings::fromArray(['api_key' => 'cvs_live_config', 'api_url' => 'https://test.example/api']);
+    public function testTheApiAddressIsNotASetting(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $blueprints = \Symfony\Component\Yaml\Yaml::parseFile($root . '/blueprints.yaml');
+        $defaults = \Symfony\Component\Yaml\Yaml::parseFile($root . '/converter-studio.yaml');
 
-        self::assertSame('cvs_live_env', $empty->apiKey());
-        self::assertSame('http://localhost:8080/api', $empty->apiUrl());
-        self::assertSame('cvs_live_config', $set->apiKey());
-        self::assertSame('https://test.example/api', $set->apiUrl());
+        self::assertArrayNotHasKey('api_url', $blueprints['form']['fields']);
+        self::assertArrayNotHasKey('api_url', $defaults);
     }
 
     public function testBadValuesAreReplacedBySafeOnes(): void
     {
         $settings = Settings::fromArray([
-            'api_url' => 'javascript:alert(1)',
             'originals' => 'everywhere',
             'max_credits' => 'lots',
             'upload_wait' => 100000,
             'rules' => ['heic' => ['upload' => true, 'to' => 'exe'], 'nope' => ['upload' => true]],
         ]);
 
-        self::assertSame('https://converter.studio/api', $settings->apiUrl());
         self::assertSame('keep', $settings->originals());
         self::assertSame(20, $settings->maxCredits());
         self::assertSame(300, $settings->uploadWait());

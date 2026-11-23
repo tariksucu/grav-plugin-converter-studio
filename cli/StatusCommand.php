@@ -33,7 +33,12 @@ class StatusCommand extends ConsoleCommand
         $settings = $services->settings();
 
         $io->writeln('<info>Converter Studio</info> ' . ($settings->enabled() ? 'enabled' : '<red>disabled</red>'));
-        $io->writeln('API: ' . $settings->apiUrl());
+        $io->writeln('API: ' . $settings->apiUrl() . (getenv(Settings::URL_VARIABLE) ? ' (from ' . Settings::URL_VARIABLE . ')' : ''));
+        $ignored = $settings->ignoredApiUrl();
+        if ($ignored !== null) {
+            $io->writeln('<yellow>api_url in the plugin settings (' . $ignored . ') is ignored: the key only goes to '
+                . 'converter.studio, or to an address set in ' . Settings::URL_VARIABLE . ' in the environment.</yellow>');
+        }
         if ($settings->apiKey() === null) {
             $io->writeln('API key: <red>none</red> (plugin settings, or ' . Settings::KEY_VARIABLE . ')');
         } else {

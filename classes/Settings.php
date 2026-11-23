@@ -14,8 +14,10 @@ final class Settings
     /** Where the original goes once its converted file is in place. */
     public const ORIGINALS = ['keep', 'beside', 'delete'];
 
-    /** The environment variables read when the settings leave the key or the address empty. */
+    /** The key, when the settings have none. */
     public const KEY_VARIABLE = 'CONVERTER_STUDIO_API_KEY';
+
+    /** Another API address (a test server); only the environment can set one. */
     public const URL_VARIABLE = 'CONVERTER_STUDIO_API_URL';
 
     /**
@@ -51,18 +53,25 @@ final class Settings
     }
 
     /**
-     * The API's address: the one in the settings, otherwise CONVERTER_STUDIO_API_URL, otherwise
-     * https://converter.studio/api. Only http(s) addresses count.
+     * The API's address, which gets the API key: https://converter.studio/api, or
+     * CONVERTER_STUDIO_API_URL when the environment sets an http(s) address (a test server).
+     * Never the settings: anyone who can edit the configuration could point them at a server of
+     * their own and receive the key.
      */
     public function apiUrl(): string
     {
-        foreach ([(string) ($this->config['api_url'] ?? ''), (string) getenv(self::URL_VARIABLE)] as $url) {
-            $url = rtrim(trim($url), '/');
-            if ($url !== '' && preg_match('#^https?://[^/\s]+#i', $url)) {
-                return $url;
-            }
-        }
-        return Client::DEFAULT_BASE;
+        $url = rtrim(trim((string) getenv(self::URL_VARIABLE)), '/');
+        return $url !== '' && preg_match('#^https?://[^/\s]+#i', $url) ? $url : Client::DEFAULT_BASE;
+    }
+
+    /**
+     * An address left in the settings (`api_url`, which version 1.0.0 read) that is not the
+     * default: it is ignored, and the status command says so.
+     */
+    public function ignoredApiUrl(): ?string
+    {
+        $url = rtrim(trim((string) ($this->config['api_url'] ?? '')), '/');
+        return $url !== '' && $url !== Client::DEFAULT_BASE ? $url : null;
     }
 
     /**

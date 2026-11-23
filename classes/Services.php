@@ -12,20 +12,35 @@ use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /**
- * The plugin's parts, put together from a Grav instance.
+ * The plugin's parts, put together from a Grav instance. Only the settings are read up front;
+ * the API client (and its HTTP client) is made the first time a conversion needs it.
  */
 final class Services
 {
-    /** Seconds one scheduler run (every minute) spends on unfinished conversions. */
-    private const SCHEDULER_BUDGET = 50;
+    /**
+     * Seconds one scheduler run (every minute) spends on unfinished conversions. Grav runs the
+     * job inline, so the other jobs of that minute wait for it; what is left goes on next minute.
+     */
+    public const SCHEDULER_BUDGET = 20;
 
+    private ?Converter $converter = null;
+
+    private ?Worker $worker = null;
+
+    private readonly References $references;
+
+    /**
+     * @param \Closure(References): Converter $makeConverter
+     * @param \Closure(string, string): void $log
+     */
     private function __construct(
         private readonly Settings $settings,
-        private readonly Converter $converter,
-        private readonly References $references,
-        private readonly Worker $worker,
         private readonly string $userDir,
+        private readonly string $dataDir,
+        private readonly \Closure $makeConverter,
+        private readonly \Closure $log,
     ) {
+        $this->references = new References($dataDir . '/renames.json');
     }
 
     public static function fromGrav(Grav $grav): self
@@ -34,13 +49,37 @@ final class Services
         $locator = $grav['locator'];
         $userDir = rtrim((string) $locator->findResource('user://', true), '/');
         $dataDir = rtrim((string) $locator->findResource('user://data', true, true), '/') . '/converter-studio';
-        $client = new Client(self::http(), $settings->apiKey(), $settings->apiUrl(), ConverterStudioPlugin::VERSION);
-        $references = new References($dataDir . '/renames.json');
         $log = static function (string $level, string $message) use ($grav): void {
             $grav['log']->{$level === 'info' ? 'info' : 'warning'}($message);
         };
-        $converter = new Converter($client, new JobStore($dataDir . '/jobs'), $references, $userDir, $dataDir . '/originals', $log);
-        return new self($settings, $converter, $references, new Worker($converter, $settings), $userDir);
+        return self::create(
+            $settings,
+            $userDir,
+            $dataDir,
+            static fn (References $references): Converter => new Converter(
+                new Client(self::http(), $settings->apiKey(), $settings->apiUrl(), ConverterStudioPlugin::VERSION),
+                new JobStore($dataDir . '/jobs'),
+                $references,
+                $userDir,
+                $dataDir . '/originals',
+                $log,
+            ),
+            $log,
+        );
+    }
+
+    /**
+     * The parts from their pieces (fromGrav() for a site; tests pass their own converter).
+     *
+     * @param \Closure(References): Converter $makeConverter Called once, when first needed.
+     * @param (\Closure(string, string): void)|null $log
+     */
+    public static function create(Settings $settings, string $userDir, string $dataDir, \Closure $makeConverter, ?\Closure $log = null): self
+    {
+        $services = new self($settings, $userDir, $dataDir, $makeConverter, $log ?? static function (string $level, string $message): void {
+        });
+        $services->renameOldOriginals();
+        return $services;
     }
 
     /**
@@ -62,7 +101,7 @@ final class Services
 
     public function converter(): Converter
     {
-        return $this->converter;
+        return $this->converter ??= ($this->makeConverter)($this->references);
     }
 
     public function references(): References
@@ -72,7 +111,15 @@ final class Services
 
     public function worker(): Worker
     {
-        return $this->worker;
+        return $this->worker ??= new Worker($this->converter(), $this->settings);
+    }
+
+    /**
+     * Whether the API client has been made (tests check that reading the settings never does).
+     */
+    public function started(): bool
+    {
+        return $this->converter !== null;
     }
 
     /**
@@ -84,17 +131,47 @@ final class Services
     }
 
     /**
-     * The scheduler's job: finishes unfinished conversions for up to 50 seconds and forgets old
-     * finished ones.
+     * A path relative to the site's user folder, or null when it is outside it.
+     */
+    public function relative(string $path): ?string
+    {
+        return Converter::relativeTo($this->userDir, $path);
+    }
+
+    /**
+     * The originals kept by version 1.0.0 under their own names get the suffix that keeps the web
+     * server from serving them (see Originals), the first time the plugin works after the update.
+     */
+    private function renameOldOriginals(): void
+    {
+        $renamed = (new Originals($this->dataDir . '/originals'))->migrate();
+        if ($renamed !== []) {
+            ($this->log)('info', sprintf(
+                'Converter Studio: %d kept original%s renamed to end in %s, which the web server does not serve.',
+                count($renamed),
+                count($renamed) === 1 ? '' : 's',
+                Originals::SUFFIX,
+            ));
+        }
+    }
+
+    /**
+     * The scheduler's job: finishes unfinished conversions for up to SCHEDULER_BUDGET seconds
+     * and forgets old finished ones.
      */
     public static function scheduled(): string
     {
-        $services = self::fromGrav(Grav::instance());
-        if (!$services->settings->enabled()) {
+        return self::fromGrav(Grav::instance())->runScheduled();
+    }
+
+    public function runScheduled(): string
+    {
+        if (!$this->settings->enabled()) {
             return 'Converter Studio is disabled.';
         }
-        $jobs = $services->worker->pending(microtime(true) + self::SCHEDULER_BUDGET);
-        $services->converter->jobs()->prune();
+        $converter = $this->converter();
+        $jobs = $this->worker()->pending($converter->now() + self::SCHEDULER_BUDGET);
+        $converter->jobs()->prune();
         $lines = array_map(static fn (Job $job): string => $job->describe(), $jobs);
         return $lines === [] ? 'Nothing to convert.' : implode("\n", $lines);
     }

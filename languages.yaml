@@ -2,9 +2,7 @@ en:
   PLUGIN_CONVERTER_STUDIO:
     ACCOUNT: Converter Studio account
     API_KEY: API key
-    API_KEY_HELP: Make one on your account page at converter.studio (API keys). A saved key is not shown again; leave the field as it is to keep it. Without a key here, the CONVERTER_STUDIO_API_KEY environment variable is used, which keeps the key out of user/config.
-    API_URL: API address
-    API_URL_HELP: Leave it as it is. Only change it to try the plugin against a test server.
+    API_KEY_HELP: Make one on your account page at converter.studio (API keys). A saved key is not shown again; leave the field as it is to keep it. Without a key here, the CONVERTER_STUDIO_API_KEY environment variable is used, which keeps the key out of user/config. The key is only sent to converter.studio, or to the address in the CONVERTER_STUDIO_API_URL environment variable (a test server).
     ON_UPLOAD: Convert when uploaded in the Admin
     ON_UPLOAD_TEXT: Each kind of file converts only when it is switched on here. A conversion uses credits of your Converter Studio account. Files uploaded by visitors through forms are never converted. Existing files convert with bin/plugin converter-studio convert.
     HEIC: iPhone photos (HEIC, HEIF)
@@ -25,8 +23,8 @@ en:
     AUDIO_HELP: A much smaller file that every browser plays.
     RESULTS: Converted files
     ORIGINALS: The original file
-    ORIGINALS_HELP: Kept originals are moved to user/data/converter-studio/originals, which is not reachable from the web.
-    ORIGINALS_KEEP: Keep it in user/data (not public)
+    ORIGINALS_HELP: Kept originals are moved to user/data/converter-studio/originals and renamed to end in .original.txt (IMG_0042.MOV.original.txt), which Grav's web server rules do not serve. Remove .original.txt from the name to use one again.
+    ORIGINALS_KEEP: Keep it in user/data (not served)
     ORIGINALS_BESIDE: Leave it next to the converted file
     ORIGINALS_DELETE: Delete it
     IMAGE_QUALITY: Photo quality

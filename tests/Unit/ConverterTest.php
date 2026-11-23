@@ -92,7 +92,10 @@ final class ConverterTest extends TestCase
         self::assertSame(Job::DONE, $job->state());
         self::assertSame('converted bytes', file_get_contents($this->page . '/photo.jpg'));
         self::assertFileDoesNotExist($file);
-        self::assertSame('heic bytes', file_get_contents($this->root . '/data/converter-studio/originals/pages/01.blog/post/photo.heic'));
+        // Under a name the web server does not serve (photo.heic itself would be, with some types).
+        self::assertSame('heic bytes', file_get_contents($this->root . '/data/converter-studio/originals/pages/01.blog/post/photo.heic.original.txt'));
+        self::assertFileDoesNotExist($this->root . '/data/converter-studio/originals/pages/01.blog/post/photo.heic');
+        self::assertSame('data/converter-studio/originals/pages/01.blog/post/photo.heic.original.txt', $job->data['original']);
         self::assertSame('pages/01.blog/post/photo.jpg', $job->data['result']);
         self::assertSame('photo.heic → photo.jpg (1 credit)', $job->describe());
         self::assertSame(['photo.heic' => 'photo.jpg'], (new References($this->root . '/data/converter-studio/renames.json'))->forFolder('pages/01.blog/post'));
@@ -136,6 +139,24 @@ final class ConverterTest extends TestCase
         self::assertSame('another photo', file_get_contents($this->page . '/photo.jpg'));
         self::assertSame('converted bytes', file_get_contents($this->page . '/photo-1.jpg'));
         self::assertSame('pages/01.blog/post/photo-1.jpg', $job->data['result']);
+    }
+
+    public function testAKeptOriginalNeverReplacesAnother(): void
+    {
+        $converter = $this->converter();
+        $originals = $this->root . '/data/converter-studio/originals/pages/01.blog/post';
+        mkdir($originals, 0777, true);
+        file_put_contents($originals . '/clip.mov.original.txt', 'kept earlier');
+        // An original kept by 1.0.0 that still has its own name: it will want clip-1.mov.original.txt.
+        file_put_contents($originals . '/clip-1.mov', 'kept by 1.0.0');
+        $file = $this->photo('clip.mov', 'new bytes');
+
+        $job = $converter->run($this->job($converter, $file), $this->clock->now() + 60);
+
+        self::assertSame(Job::DONE, $job->state());
+        self::assertSame('kept earlier', file_get_contents($originals . '/clip.mov.original.txt'));
+        self::assertSame('new bytes', file_get_contents($originals . '/clip-2.mov.original.txt'));
+        self::assertSame('kept by 1.0.0', file_get_contents($originals . '/clip-1.mov'));
     }
 
     public function testTheMediaDetailsFollowTheConvertedFile(): void

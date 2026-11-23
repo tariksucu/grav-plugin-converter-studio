@@ -1,7 +1,7 @@
 name: Converter Studio
 slug: converter-studio
 type: plugin
-version: 1.0.0
+version: 1.0.1
 description: Converts uploads that browsers and Grav cannot use (iPhone HEIC photos, camera RAW, TIFF, MOV and other videos, Office documents) into JPG, WebP, MP4, PDF or MP3 with the Converter Studio API.
 icon: exchange
 author:
@@ -45,14 +45,6 @@ form:
       help: PLUGIN_CONVERTER_STUDIO.API_KEY_HELP
       placeholder: cvs_live_…
       autocomplete: new-password
-
-    api_url:
-      type: text
-      label: PLUGIN_CONVERTER_STUDIO.API_URL
-      help: PLUGIN_CONVERTER_STUDIO.API_URL_HELP
-      placeholder: https://converter.studio/api
-      validate:
-        type: url
 
     upload_section:
       type: section
