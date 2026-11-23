@@ -1,0 +1,47 @@
+enabled: true
+# Your Converter Studio API key (https://converter.studio/account#api-keys). Left empty, the
+# CONVERTER_STUDIO_API_KEY environment variable is used, which keeps the key out of user/config.
+api_key: ''
+# Change only to try the plugin against a test server.
+api_url: 'https://converter.studio/api'
+
+# What converts when it is uploaded in the Admin. Nothing converts until a kind is switched on.
+rules:
+  heic:
+    upload: false
+    to: jpg
+  raw:
+    upload: false
+    to: jpg
+  tiff:
+    upload: false
+    to: jpg
+  video:
+    upload: false
+    to: mp4
+  # Office documents always become PDF, audio always MP3.
+  office:
+    upload: false
+  audio:
+    upload: false
+
+# keep: moved to user/data/converter-studio/originals (not public); beside: left next to the
+# converted file; delete: removed.
+originals: keep
+
+results:
+  image_quality: balanced
+  image_long_side: ''
+  keep_metadata: false
+  video_height: '1080'
+  video_quality: balanced
+  audio_bitrate: '192'
+
+# Credits one file may cost without approval (bin/plugin converter-studio confirm).
+max_credits: 20
+# Seconds an upload waits for its conversion; longer ones finish in the background.
+upload_wait: 40
+# Grav's scheduler finishes conversions that outlast an upload (bin/grav scheduler in cron).
+scheduler: true
+# Saving a page points its links to a converted file (photo.heic → photo.jpg).
+fix_references: true

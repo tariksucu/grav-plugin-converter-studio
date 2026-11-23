@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+
+# Cancel in-progress runs for the same branch/PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        # The lowest PHP the plugin supports (Grav 1.7 sites) and the one Grav 2 needs.
+        php: ['8.1', '8.3']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Lint PHP
+        run: find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Install test dependencies
+        run: composer install --no-interaction --no-progress
+
+      # Unit tests with a mocked API: no network, no API key.
+      - name: Run tests
+        run: vendor/bin/phpunit
+
+      # What GPM installs is the archive of the tag: no development files in it.
+      - name: Check the release archive
+        run: |
+          git archive --format=tar HEAD | tar -t > archive.txt
+          ! grep -E '^(tests/|\.github/|phpunit\.xml\.dist|composer\.json|dev/|SUBMISSION\.md|vendor/)' archive.txt
+          grep -qx 'converter-studio.php' archive.txt
+          grep -qx 'blueprints.yaml' archive.txt

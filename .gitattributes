@@ -1,0 +1,11 @@
+# Development files stay out of the release zip (GPM installs the git archive of the tag)
+/tests                 export-ignore
+# composer.json only installs the test tools; the plugin loads its classes itself.
+/composer.json         export-ignore
+/phpunit.xml.dist      export-ignore
+/.phpunit.cache        export-ignore
+/.github               export-ignore
+/.gitignore            export-ignore
+/.gitattributes        export-ignore
+/dev                   export-ignore
+/SUBMISSION.md         export-ignore

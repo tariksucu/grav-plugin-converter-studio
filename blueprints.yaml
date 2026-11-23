@@ -1,0 +1,296 @@
+name: Converter Studio
+slug: converter-studio
+type: plugin
+version: 1.0.0
+description: Converts uploads that browsers and Grav cannot use (iPhone HEIC photos, camera RAW, TIFF, MOV and other videos, Office documents) into JPG, WebP, MP4, PDF or MP3 with the Converter Studio API.
+icon: exchange
+author:
+  name: Converter Studio
+  email: support@converter.studio
+  url: https://converter.studio
+homepage: https://converter.studio
+docs: https://converter.studio/developers
+bugs: https://github.com/tariksucu/grav-plugin-converter-studio/issues
+keywords: heic, raw, convert, conversion, video, mp4, webp, pdf, media, upload, iphone
+license: MIT
+compatibility:
+  grav: ['1.7', '2.0']
+
+dependencies:
+  - { name: grav, version: '>=1.7.50' }
+  - { name: php, version: '>=8.1' }
+
+form:
+  validation: loose
+  fields:
+    enabled:
+      type: toggle
+      label: PLUGIN_ADMIN.PLUGIN_STATUS
+      highlight: 1
+      default: 1
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    account_section:
+      type: section
+      title: PLUGIN_CONVERTER_STUDIO.ACCOUNT
+      underline: true
+
+    api_key:
+      type: password
+      label: PLUGIN_CONVERTER_STUDIO.API_KEY
+      help: PLUGIN_CONVERTER_STUDIO.API_KEY_HELP
+      placeholder: cvs_live_…
+      autocomplete: new-password
+
+    api_url:
+      type: text
+      label: PLUGIN_CONVERTER_STUDIO.API_URL
+      help: PLUGIN_CONVERTER_STUDIO.API_URL_HELP
+      placeholder: https://converter.studio/api
+      validate:
+        type: url
+
+    upload_section:
+      type: section
+      title: PLUGIN_CONVERTER_STUDIO.ON_UPLOAD
+      text: PLUGIN_CONVERTER_STUDIO.ON_UPLOAD_TEXT
+      underline: true
+
+    rules.heic.upload:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.HEIC
+      help: PLUGIN_CONVERTER_STUDIO.HEIC_HELP
+      highlight: 1
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    rules.heic.to:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.HEIC_TO
+      default: jpg
+      options:
+        jpg: JPG
+        webp: WebP
+        png: PNG
+
+    rules.raw.upload:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.RAW
+      help: PLUGIN_CONVERTER_STUDIO.RAW_HELP
+      highlight: 1
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    rules.raw.to:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.RAW_TO
+      default: jpg
+      options:
+        jpg: JPG
+        webp: WebP
+        png: PNG
+
+    rules.tiff.upload:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.TIFF
+      help: PLUGIN_CONVERTER_STUDIO.TIFF_HELP
+      highlight: 1
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    rules.tiff.to:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.TIFF_TO
+      default: jpg
+      options:
+        jpg: JPG
+        webp: WebP
+        png: PNG
+
+    rules.video.upload:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.VIDEO
+      help: PLUGIN_CONVERTER_STUDIO.VIDEO_HELP
+      highlight: 1
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    rules.video.to:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.VIDEO_TO
+      default: mp4
+      options:
+        mp4: MP4 (H.264)
+        webm: WebM
+
+    rules.office.upload:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.OFFICE
+      help: PLUGIN_CONVERTER_STUDIO.OFFICE_HELP
+      highlight: 1
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    rules.audio.upload:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.AUDIO
+      help: PLUGIN_CONVERTER_STUDIO.AUDIO_HELP
+      highlight: 1
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    results_section:
+      type: section
+      title: PLUGIN_CONVERTER_STUDIO.RESULTS
+      underline: true
+
+    originals:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.ORIGINALS
+      help: PLUGIN_CONVERTER_STUDIO.ORIGINALS_HELP
+      default: keep
+      options:
+        keep: PLUGIN_CONVERTER_STUDIO.ORIGINALS_KEEP
+        beside: PLUGIN_CONVERTER_STUDIO.ORIGINALS_BESIDE
+        delete: PLUGIN_CONVERTER_STUDIO.ORIGINALS_DELETE
+
+    results.image_quality:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.IMAGE_QUALITY
+      default: balanced
+      options:
+        high: PLUGIN_CONVERTER_STUDIO.QUALITY_HIGH
+        balanced: PLUGIN_CONVERTER_STUDIO.QUALITY_BALANCED
+        small: PLUGIN_CONVERTER_STUDIO.QUALITY_SMALL
+
+    results.image_long_side:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.IMAGE_LONG_SIDE
+      help: PLUGIN_CONVERTER_STUDIO.IMAGE_LONG_SIDE_HELP
+      default: ''
+      options:
+        '': PLUGIN_CONVERTER_STUDIO.SIZE_KEEP
+        '2560': 2560 px
+        '1920': 1920 px
+        '1280': 1280 px
+
+    results.keep_metadata:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.KEEP_METADATA
+      help: PLUGIN_CONVERTER_STUDIO.KEEP_METADATA_HELP
+      highlight: 0
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.YES
+        0: PLUGIN_ADMIN.NO
+      validate:
+        type: bool
+
+    results.video_height:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.VIDEO_HEIGHT
+      help: PLUGIN_CONVERTER_STUDIO.VIDEO_HEIGHT_HELP
+      default: '1080'
+      options:
+        '1080': 1080p
+        '720': 720p
+        '480': 480p
+
+    results.video_quality:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.VIDEO_QUALITY
+      default: balanced
+      options:
+        high: PLUGIN_CONVERTER_STUDIO.QUALITY_HIGH
+        balanced: PLUGIN_CONVERTER_STUDIO.QUALITY_BALANCED
+        small: PLUGIN_CONVERTER_STUDIO.QUALITY_SMALL
+
+    results.audio_bitrate:
+      type: select
+      label: PLUGIN_CONVERTER_STUDIO.AUDIO_BITRATE
+      default: '192'
+      options:
+        '128': 128 kbit/s
+        '192': 192 kbit/s
+        '256': 256 kbit/s
+        '320': 320 kbit/s
+
+    limits_section:
+      type: section
+      title: PLUGIN_CONVERTER_STUDIO.LIMITS
+      underline: true
+
+    max_credits:
+      type: text
+      label: PLUGIN_CONVERTER_STUDIO.MAX_CREDITS
+      help: PLUGIN_CONVERTER_STUDIO.MAX_CREDITS_HELP
+      default: 20
+      size: x-small
+      validate:
+        type: int
+        min: 0
+        max: 100000
+
+    upload_wait:
+      type: text
+      label: PLUGIN_CONVERTER_STUDIO.UPLOAD_WAIT
+      help: PLUGIN_CONVERTER_STUDIO.UPLOAD_WAIT_HELP
+      default: 40
+      size: x-small
+      append: PLUGIN_CONVERTER_STUDIO.SECONDS
+      validate:
+        type: int
+        min: 5
+        max: 300
+
+    scheduler:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.SCHEDULER
+      help: PLUGIN_CONVERTER_STUDIO.SCHEDULER_HELP
+      highlight: 1
+      default: 1
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    fix_references:
+      type: toggle
+      label: PLUGIN_CONVERTER_STUDIO.FIX_REFERENCES
+      help: PLUGIN_CONVERTER_STUDIO.FIX_REFERENCES_HELP
+      highlight: 1
+      default: 1
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
